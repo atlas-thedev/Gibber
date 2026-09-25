@@ -1,0 +1,21 @@
+[Unit]
+Description=Gibber Cloud Sandbox Manager
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/gibber
+EnvironmentFile=/opt/gibber/.env
+ExecStart=/usr/bin/node src/index.js
+Restart=always
+RestartSec=3
+# Give the app time to force-remove every sandbox before systemd SIGKILLs it
+KillSignal=SIGTERM
+TimeoutStopSec=30
+StandardOutput=append:/var/log/gibber.log
+StandardError=append:/var/log/gibber.log
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

@@ -206,6 +206,10 @@ Raise `MAX_SANDBOXES` only if your workloads are mostly idle; Docker does not ov
 | `CAPACITY_EXHAUSTED` | widen `PORT_RANGE_*` or raise `MAX_SANDBOXES` |
 | Containers survive a crash | they are reaped on next boot by label; check `docker ps -a --filter label=gibber.owner` |
 
+## Deploying
+
+See [deploy/DEPLOYMENT.md](deploy/DEPLOYMENT.md) for the production setup: systemd unit, nginx vhost with preview proxying and TLS, plus the nginx/Vite/Cloudflare gotchas worth knowing before you hit them.
+
 ## License
 
 MIT
