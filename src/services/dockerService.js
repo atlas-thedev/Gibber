@@ -139,10 +139,21 @@ class DockerService {
           CapDrop: ['ALL'],
           SecurityOpt: ['no-new-privileges:true'],
           ReadonlyRootfs: true, // only the writable mounts below can be touched
-          Tmpfs: {
-            '/tmp': `rw,noexec,nosuid,size=64m`,
-            [this.cfg.workdir]: `rw,exec,nosuid,size=${this.cfg.diskQuotaMb}m,uid=1000,gid=1000`
-          },
+          // /tmp is RAM-backed and tiny. The workdir is an ANONYMOUS VOLUME, not a
+          // tmpfs, for two reasons:
+          //   1. Docker's archive API (getArchive / `docker cp`) cannot see inside a
+          //      tmpfs mount — reads would 404 on files that plainly exist.
+          //   2. tmpfs pages count against the container's memory cgroup, so a
+          //      300MB node_modules would eat most of the 512MB budget.
+          // `remove({ v: true })` disposes of the volume with the container.
+          Tmpfs: { '/tmp': 'rw,noexec,nosuid,size=64m' },
+          Mounts: [
+            {
+              Type: 'volume',
+              Target: this.cfg.workdir,
+              ReadOnly: false
+            }
+          ],
           Ulimits: [{ Name: 'nofile', Soft: 1024, Hard: 2048 }],
           RestartPolicy: { Name: 'no' }, // never resurrect a reaped sandbox
           AutoRemove: false // we remove explicitly so we can read exit info first
@@ -374,8 +385,14 @@ class DockerService {
     try {
       stream = await this.docker.getContainer(s.containerId).getArchive({ path: abs });
     } catch (err) {
-      if (err.statusCode === 404) throw NotFound(`No such file in sandbox: ${abs}`);
-      throw err;
+      if (err.statusCode !== 404) throw err;
+      // The daemon reports 404 both for a genuinely missing file and for any
+      // path the archive API cannot traverse (tmpfs mounts, some storage
+      // drivers). Confirm from inside the container before giving up, and fall
+      // back to streaming a tar out through exec.
+      const probe = await this.execCollect(id, ['test', '-f', abs], { timeoutMs: 10_000 });
+      if (probe.exitCode !== 0) throw NotFound(`No such file in sandbox: ${abs}`);
+      return this.readFileViaExec(id, abs, { maxBytes, encoding });
     }
 
     const extract = tar.extract();
@@ -404,6 +421,17 @@ class DockerService {
 
     this.touch(id);
     return result;
+  }
+
+  /** Read a file by catting it through exec. Base64 keeps binary content intact. */
+  async readFileViaExec(id, abs, { maxBytes, encoding }) {
+    const out = await this.execCollect(id, ['sh', '-c', `base64 "${abs}"`], { timeoutMs: 30_000 });
+    if (out.exitCode !== 0) throw NotFound(`Cannot read ${abs}: ${out.stderr.trim()}`);
+    const buf = Buffer.from(out.stdout.replace(/\s+/g, ''), 'base64');
+    if (buf.length > maxBytes) {
+      throw new AppError(`File larger than ${maxBytes} bytes`, 413, 'FILE_TOO_LARGE');
+    }
+    return { path: abs, size: buf.length, content: buf.toString(encoding), encoding };
   }
 
   async listDir(id, dirPath = '.') {

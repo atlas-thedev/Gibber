@@ -161,6 +161,8 @@ Run the full demo: `node examples/client.js`
 
 **Killing an exec.** Docker has no "kill exec" endpoint. We `exec.inspect()` to read the real `Pid`, then run `kill -TERM <pid>` as a second exec inside the container. Destroying the hijacked stream alone would detach us and leave the process burning CPU.
 
+**Archive API vs. mounts.** `getArchive` / `docker cp` cannot see inside a **tmpfs** mount and `putArchive` is refused outright when `ReadonlyRootfs` is set — both fail in ways that look like a missing file. Gibber therefore mounts the workdir as an anonymous **volume** (also keeping `node_modules` out of the 512 MB memory cgroup) and falls back to streaming tar through `exec` on both the write and read path.
+
 **File I/O without restart.** `putArchive` / `getArchive` take and return **tar** streams. Writes build one in-memory tar with `tar-stream` (including explicit directory entries, because busybox tar will not create parents), so an entire project is one API call. Reads must unpack the returned tar even for a single file, with a size cap so a huge file cannot OOM the manager.
 
 **Auto-kill (TTL).** Every write, exec, stdin frame and socket heartbeat calls `touch(id)`. A sweeper (`setInterval(...).unref()`) removes anything idle for `SANDBOX_TTL_MS`. An attached terminal touches its sandbox every 60 s so a watched dev server is not reaped mid-session.
@@ -172,7 +174,7 @@ Run the full demo: `node examples/client.js`
 ## Security model
 
 - non-root `sandbox` user (uid 1000), `CapDrop: ALL`, `no-new-privileges`
-- read-only rootfs; only `/tmp` (64 MB, `noexec`) and the workdir tmpfs are writable, which also acts as a disk quota
+- read-only rootfs; only `/tmp` (64 MB tmpfs, `noexec`) and the workdir volume are writable
 - memory + swap capped at 512 MB, CPU quota 0.5, `PidsLimit` 128 (fork-bomb protection), `nofile` ulimit
 - `Internal: true` network → no outbound internet from sandboxes
 - host ports bound to `127.0.0.1` only — put your reverse proxy in front for public preview URLs
