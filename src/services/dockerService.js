@@ -284,9 +284,68 @@ class DockerService {
     }
     pack.finalize();
 
-    await this.docker.getContainer(s.containerId).putArchive(pack, { path: this.cfg.workdir });
+    await this.putArchive(s, pack);
     this.touch(id);
     return { written: files.length };
+  }
+
+  /**
+   * Ship a tar stream into the container.
+   *
+   * Gotcha: the Docker daemon rejects `putArchive` with
+   * "container rootfs is marked read-only" whenever ReadonlyRootfs is set —
+   * even when the destination is a writable tmpfs mount, because the check is
+   * on the container, not the target path. So we pipe the same tar into
+   * `tar -xf -` through exec, which runs *inside* the container namespace and
+   * therefore only has to satisfy normal filesystem permissions.
+   * putArchive is still tried first: it is one API call and avoids spawning a
+   * process when the rootfs is writable.
+   */
+  async putArchive(sandbox, pack) {
+    const container = this.docker.getContainer(sandbox.containerId);
+    const buf = await collect(pack); // buffer once so we can retry the same bytes
+
+    try {
+      await container.putArchive(buf, { path: this.cfg.workdir });
+      return;
+    } catch (err) {
+      const readOnly = /read-only/i.test(err.message || '');
+      if (!readOnly) throw err;
+    }
+
+    const exec = await container.exec({
+      Cmd: ['tar', '-xf', '-', '-C', this.cfg.workdir],
+      AttachStdin: true,
+      AttachStdout: true,
+      AttachStderr: true,
+      Tty: false,
+      User: this.cfg.user,
+      WorkingDir: this.cfg.workdir
+    });
+    const stream = await exec.start({ hijack: true, stdin: true });
+
+    const errChunks = [];
+    const sink = new (require('stream').Writable)({ write(_c, _e, cb) { cb(); } });
+    const errSink = new (require('stream').Writable)({
+      write(c, _e, cb) { errChunks.push(c); cb(); }
+    });
+    container.modem.demuxStream(stream, sink, errSink);
+
+    await new Promise((resolve, reject) => {
+      stream.on('end', resolve);
+      stream.on('close', resolve);
+      stream.on('error', reject);
+      stream.end(buf); // write the whole archive, then EOF so tar terminates
+    });
+
+    const info = await exec.inspect();
+    if (info.ExitCode !== 0) {
+      throw new AppError(
+        `tar extract failed (exit ${info.ExitCode}): ${Buffer.concat(errChunks).toString().trim()}`,
+        500,
+        'WRITE_FAILED'
+      );
+    }
   }
 
   /** Flatten `{ "src/App.jsx": "…", "package.json": "…" }` into writeFiles input. */
