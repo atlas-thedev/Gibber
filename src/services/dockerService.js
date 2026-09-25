@@ -148,11 +148,11 @@ class DockerService {
           // `remove({ v: true })` disposes of the volume with the container.
           Tmpfs: { '/tmp': 'rw,noexec,nosuid,size=64m' },
           Mounts: [
-            {
-              Type: 'volume',
-              Target: this.cfg.workdir,
-              ReadOnly: false
-            }
+            { Type: 'volume', Target: this.cfg.workdir, ReadOnly: false },
+            // Separate volume for the npm cache: it must not sit on the small
+            // /tmp tmpfs (ENOSPC on the first real `npm install`) and it should
+            // not pollute the user's workspace.
+            { Type: 'volume', Target: '/home/sandbox/.cache', ReadOnly: false }
           ],
           Ulimits: [{ Name: 'nofile', Soft: 1024, Hard: 2048 }],
           RestartPolicy: { Name: 'no' }, // never resurrect a reaped sandbox

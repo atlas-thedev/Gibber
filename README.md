@@ -200,6 +200,7 @@ Raise `MAX_SANDBOXES` only if your workloads are mostly idle; Docker does not ov
 | `connect EACCES /var/run/docker.sock` | `sudo usermod -aG docker $USER` then re-login |
 | `IMAGE_NOT_FOUND` | `npm run build:image` |
 | `npm install` hangs in a sandbox | internal network has no egress — see the note above |
+| `npm install` fails with `ENOSPC` | the npm cache must be on its own volume, not `/tmp` (64 MB tmpfs) |
 | `CAPACITY_EXHAUSTED` | widen `PORT_RANGE_*` or raise `MAX_SANDBOXES` |
 | Containers survive a crash | they are reaped on next boot by label; check `docker ps -a --filter label=gibber.owner` |
 

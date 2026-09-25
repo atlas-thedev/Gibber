@@ -10,7 +10,7 @@ RUN apk add --no-cache tini bash git \
  && delgroup node 2>/dev/null || true \
  && addgroup -g 1000 -S sandbox \
  && adduser  -u 1000 -S sandbox -G sandbox -h /home/sandbox \
- && mkdir -p /home/sandbox/app \
+ && mkdir -p /home/sandbox/app /home/sandbox/.cache/npm \
  && chown -R 1000:1000 /home/sandbox \
  && getent passwd sandbox
 
@@ -19,7 +19,9 @@ RUN npm install -g vite@5 --unsafe-perm && npm cache clean --force
 
 USER sandbox
 WORKDIR /home/sandbox/app
-ENV HOME=/home/sandbox NPM_CONFIG_CACHE=/tmp/.npm HOST=0.0.0.0
+# The npm cache must NOT live in /tmp: that is a small tmpfs and npm install
+# dies with ENOSPC. It gets its own volume (see HostConfig.Mounts).
+ENV HOME=/home/sandbox NPM_CONFIG_CACHE=/home/sandbox/.cache/npm HOST=0.0.0.0
 EXPOSE 5173
 
 # tini reaps zombie PIDs inside the container (npm spawns lots of children).
