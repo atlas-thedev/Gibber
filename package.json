@@ -1,0 +1,21 @@
+{
+  "name": "gibber",
+  "version": "1.0.0",
+  "description": "Production-grade Cloud Sandbox Manager: run AI-generated code in isolated Docker containers with TTL garbage collection, file I/O API and live WebSocket terminals.",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "build:image": "docker build -t node18-alpine-vite:latest ./docker"
+  },
+  "dependencies": {
+    "dockerode": "^4.0.2",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5",
+    "tar-stream": "^3.1.7"
+  },
+  "license": "MIT"
+}
