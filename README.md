@@ -64,6 +64,7 @@ Requirements: Node 18+, Docker Engine 24+, Linux. The user running Gibber must b
 | Var | Default | Notes |
 |---|---|---|
 | `PORT` | `3000` | API port |
+| `BIND_HOST` | `127.0.0.1` | loopback by default; put nginx/Caddy in front |
 | `SANDBOX_IMAGE` | `node18-alpine-vite:latest` | pre-built image |
 | `SANDBOX_MEMORY_MB` | `512` | hard RAM cap (swap disabled) |
 | `SANDBOX_CPUS` | `0.5` | CPU quota over a 100 ms period |
@@ -178,6 +179,7 @@ Run the full demo: `node examples/client.js`
 - memory + swap capped at 512 MB, CPU quota 0.5, `PidsLimit` 128 (fork-bomb protection), `nofile` ulimit
 - `Internal: true` network → no outbound internet from sandboxes
 - host ports bound to `127.0.0.1` only — put your reverse proxy in front for public preview URLs
+- the API itself binds `127.0.0.1` by default so it cannot be reached around the proxy
 - path traversal blocked on every file operation
 - optional `x-api-key` on REST and socket handshake
 

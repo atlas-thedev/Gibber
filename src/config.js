@@ -6,6 +6,9 @@ const num = (v, d) => (v === undefined || v === '' ? d : Number(v));
 
 module.exports = {
   port: int(process.env.PORT, 3000),
+  // Bind to loopback by default: the API is meant to sit behind a reverse proxy.
+  // Set BIND_HOST=0.0.0.0 only if you intentionally expose it directly.
+  bindHost: process.env.BIND_HOST || '127.0.0.1',
   apiKey: process.env.API_KEY || '',
   sandbox: {
     image: process.env.SANDBOX_IMAGE || 'node18-alpine-vite:latest',

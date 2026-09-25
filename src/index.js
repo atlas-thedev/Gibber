@@ -32,7 +32,9 @@ async function main() {
 
   await docker.init(); // ping daemon, create internal network, reap orphans, start GC
 
-  server.listen(config.port, () => log.info(`Gibber listening on :${config.port}`));
+  server.listen(config.port, config.bindHost, () =>
+    log.info(`Gibber listening on ${config.bindHost}:${config.port}`)
+  );
 
   /* ---------------- zombie protection ----------------
    * Any exit path removes every container we created. Without this a crash
